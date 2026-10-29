@@ -1,0 +1,269 @@
+{
+  "name": "LinkedIn Auto Poster (Excel)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * 1,3,5"
+            }
+          ]
+        }
+      },
+      "id": "a2",
+      "name": "Mon-Wed-Fri 10 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { excelPath: \"C:/Users/YOUR_NAME/.n8n-files/LinkedIn_Posts.xlsx\" } }];"
+      },
+      "id": "a3",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.excelPath }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "a4",
+      "name": "Read Excel File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "a5",
+      "name": "Extract Excel Rows",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst next = rows.find(r => String(r[\"Status\"] || \"\").trim().toLowerCase() === \"scheduled\" && String(r[\"Post Text\"] || \"\").trim());\nif (!next) return [];   // nothing scheduled: ends cleanly\nconst text = (String(next[\"Post Text\"]).trim() + \"\\n\\n\" + String(next[\"Hashtags\"] || \"\").trim()).trim().slice(0, 3000);\nreturn [{ json: { topic: next[\"Topic\"], text } }];"
+      },
+      "id": "a6",
+      "name": "Pick Next Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "postAs": "person",
+        "person": "YOUR_LINKEDIN_MEMBER_ID",
+        "text": "={{ $json.text }}",
+        "shareMediaCategory": "NONE",
+        "additionalFields": {}
+      },
+      "id": "a7",
+      "name": "Post to LinkedIn",
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "",
+          "name": "LinkedIn account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const post = $('Pick Next Post').first().json;\nconst rows = $('Extract Excel Rows').all().map(i => i.json);\nconst now = new Date().toLocaleString(\"en-IN\", { timeZone: \"Asia/Kolkata\" });\nlet done = false;\nreturn rows.map(r => {\n  if (!done && r[\"Topic\"] === post.topic && String(r[\"Status\"] || \"\").trim().toLowerCase() === \"scheduled\") {\n    r[\"Status\"] = \"Posted\";\n    r[\"Posted At\"] = now;\n    done = true;\n  }\n  return { json: r };\n});"
+      },
+      "id": "a8",
+      "name": "Update Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "fileName": "LinkedIn_Posts.xlsx",
+          "sheetName": "LinkedIn Posts"
+        }
+      },
+      "id": "a9",
+      "name": "Convert to Excel",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.excelPath }}",
+        "dataPropertyName": "data",
+        "options": {
+          "append": false
+        }
+      },
+      "id": "b1",
+      "name": "Save Excel File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel File": {
+      "main": [
+        [
+          {
+            "node": "Extract Excel Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Excel Rows": {
+      "main": [
+        [
+          {
+            "node": "Pick Next Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Next Post": {
+      "main": [
+        [
+          {
+            "node": "Post to LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Update Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Rows": {
+      "main": [
+        [
+          {
+            "node": "Convert to Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Excel": {
+      "main": [
+        [
+          {
+            "node": "Save Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Manually": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mon-Wed-Fri 10 AM": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
